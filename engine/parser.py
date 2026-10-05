@@ -172,7 +172,7 @@ class NypauDealParser(BaseDealParser):
         image_url = None
         for m in re.finditer(r"\[[^\]]+\]\((https?://[^)]+)\)", text):
             url = m.group(1).strip()
-            if "scraper-image-public" in url or "page-not-found" in url:
+            if "scraper-image-public" in url or "page-not-found" in url or "ofertasshark.cl" in url:
                 continue
             image_url = url
             break
