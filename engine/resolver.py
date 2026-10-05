@@ -110,29 +110,39 @@ class SharkLinkResolver:
             options.add_argument("--window-position=-2000,-2000")
             options.add_argument("--window-size=600,500")
 
-        # Detección automática de binarios portátiles en data/ o variables de entorno
+        # Detección automática de binarios portátiles en data/, contenedor o variables de entorno
         chrome_bin = os.getenv("CHROME_BIN") or os.getenv("CHROME_PATH")
         if not chrome_bin:
-            candidates = [
-                Path("data/chrome-linux/chrome"),
-                Path("data/chrome-linux64/chrome"),
-                Path("data/chromium/chrome"),
-                Path("data/chrome/chrome"),
-                Path("data/chromium-browser"),
-            ]
-            for c in candidates:
-                if c.is_file() and os.access(c, os.X_OK):
-                    chrome_bin = str(c.resolve())
-                    break
-                elif c.is_dir():
-                    found = list(c.rglob("chrome"))
-                    if found and os.access(found[0], os.X_OK):
-                        chrome_bin = str(found[0].resolve())
+            search_roots = [Path("data"), Path("."), Path("/tmp")]
+            for sroot in search_roots:
+                if not sroot.exists():
+                    continue
+                for name in ("chrome", "chromium", "chrome-headless-shell"):
+                    try:
+                        for p in sroot.rglob(name):
+                            if p.is_file():
+                                try:
+                                    os.chmod(p, 0o755)
+                                except Exception:
+                                    pass
+                                chrome_bin = str(p.resolve())
+                                logger.info(f"[Resolver] Binario Chrome detectado en: {chrome_bin}")
+                                break
+                    except Exception as e:
+                        logger.debug(f"[Resolver] Error buscando en {sroot}: {e}")
+                    if chrome_bin:
                         break
+                if chrome_bin:
+                    break
+
+        if not chrome_bin and sys.platform.startswith("linux"):
+            data_files = [p.name for p in Path("data").glob("*")] if Path("data").exists() else "No existe carpeta data"
+            root_files = [p.name for p in Path(".").glob("*")]
+            logger.warning(f"[Resolver] No se detectó binario de Chrome. Archivos en data/: {data_files} | Archivos en raíz: {root_files}")
 
         kwargs = {"options": options}
         if chrome_bin:
-            logger.info(f"[Resolver] Usando binario Chrome detectado en: {chrome_bin}")
+            logger.info(f"[Resolver] Usando binario Chrome: {chrome_bin}")
             kwargs["browser_executable_path"] = chrome_bin
 
         driver = uc.Chrome(**kwargs)
