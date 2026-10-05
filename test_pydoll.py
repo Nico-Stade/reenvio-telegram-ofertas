@@ -34,7 +34,6 @@ async def main():
             break
 
     if not binary:
-        # Búsqueda recursiva
         for p in Path("data").rglob("chrome*"):
             if p.is_file():
                 binary = str(p.resolve())
@@ -47,7 +46,21 @@ async def main():
         try:
             os.chmod(binary, 0o755)
             chk = subprocess.run([binary, "--version"], capture_output=True, text=True, timeout=5)
-            print(f"• Ejecución binario: retcode={chk.returncode} | out={(chk.stdout or chk.stderr).strip()[:80]}")
+            err_msg = (chk.stderr or chk.stdout).strip()
+            print(f"• Ejecución binario: retcode={chk.returncode}")
+            if err_msg:
+                print(f"• Salida/Error binario:\n  {err_msg}")
+            
+            # Revisar dependencias faltantes con ldd
+            try:
+                ldd = subprocess.run(["ldd", binary], capture_output=True, text=True, timeout=5)
+                missing = [line.strip() for line in ldd.stdout.splitlines() if "not found" in line]
+                if missing:
+                    print(f"• ⚠️ Librerías Linux faltantes ({len(missing)}):")
+                    for m in missing[:10]:
+                        print(f"     {m}")
+            except Exception:
+                pass
         except Exception as e:
             print(f"• ❌ Error al invocar binario directamente: {e}")
 
@@ -73,26 +86,27 @@ async def main():
     options.add_argument("--disable-dev-shm-usage")
     options.headless = True
 
-    print("• Iniciando Pydoll Chrome...")
+    print("\n• Iniciando Pydoll Chrome...")
     try:
         async with Chrome(options=options) as browser:
-            page = await browser.get_page()
+            tabs = await browser.get_opened_tabs()
+            tab = tabs[0] if tabs else await browser.new_tab()
             print("✓ Pydoll conectado al navegador vía CDP WebSocket!")
 
             # Navegar a dominio para setear cookies
-            await page.go_to("https://link.ofertasshark.cl")
+            await tab.go_to("https://link.ofertasshark.cl")
             for c in raw_cookies:
                 try:
-                    await page.set_cookie(name=c["name"], value=c["value"], domain=c.get("domain", ".ofertasshark.cl"))
-                except Exception as ce:
+                    await browser.set_cookies([c])
+                except Exception:
                     pass
 
             print(f"• Navegando a la oferta...")
-            await page.go_to(TEST_SHORT_URL)
+            await tab.go_to(TEST_SHORT_URL)
 
             for i in range(10):
                 await asyncio.sleep(1)
-                curr = await page.current_url
+                curr = await tab.current_url()
                 print(f"  [{i+1}s] URL: {curr[:70]}")
                 if curr and "ofertasshark.cl" not in curr:
                     print("\n" + "🎉" * 25)
@@ -102,8 +116,6 @@ async def main():
                     break
     except Exception as e:
         print(f"\n❌ Error en Pydoll: {type(e).__name__}: {e}")
-        import traceback
-        traceback.print_exc()
 
 
 if __name__ == "__main__":
