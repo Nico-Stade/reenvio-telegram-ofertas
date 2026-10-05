@@ -100,10 +100,12 @@ async def main():
     options.add_argument("--no-sandbox")
     options.add_argument("--disable-gpu")
     options.add_argument("--disable-dev-shm-usage")
+    # Evitar fingerprint de headless para no ser bloqueado por Cloudflare
+    options.add_argument("--user-agent=Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Safari/537.36")
     options.add_argument("about:blank")
     options.headless = True
 
-    print("\n• Iniciando Pydoll Chrome...")
+    print("\n• Iniciando Pydoll Chrome con User-Agent de escritorio...")
     try:
         async with Chrome(options=options) as browser:
             try:
@@ -115,28 +117,36 @@ async def main():
             print("✓ Pydoll conectado al navegador vía CDP WebSocket!")
 
             # Navegar a dominio para setear cookies
-            print("• Inyectando cookies de sesión en ofertasshark.cl...")
+            print("• Navegando a ofertasshark.cl e inyectando cookies...")
             await tab.go_to("https://link.ofertasshark.cl")
 
-            clean_cookies = []
+            all_cookies = []
             for c in raw_cookies:
-                cd = {
-                    "name": c["name"],
-                    "value": c["value"],
-                    "domain": c.get("domain", ".ofertasshark.cl"),
-                    "path": c.get("path", "/"),
-                }
-                clean_cookies.append(cd)
+                for domain in [".ofertasshark.cl", "link.ofertasshark.cl"]:
+                    cd = {
+                        "name": c["name"],
+                        "value": c["value"],
+                        "domain": domain,
+                        "path": "/",
+                        "secure": True,
+                        "httpOnly": c.get("httpOnly", True),
+                    }
+                    all_cookies.append(cd)
+
+            for cookie in all_cookies:
+                try:
+                    await browser.set_cookies([cookie])
+                except Exception:
+                    try:
+                        await tab.set_cookies([cookie])
+                    except Exception:
+                        pass
 
             try:
-                await browser.set_cookies(clean_cookies)
-                print("✓ Cookies inyectadas vía browser.set_cookies()")
-            except Exception as ce:
-                try:
-                    await tab.set_cookies(clean_cookies)
-                    print("✓ Cookies inyectadas vía tab.set_cookies()")
-                except Exception as ce2:
-                    print(f"Aviso inyectando cookies: {ce2}")
+                stored = await browser.get_cookies() if hasattr(browser, "get_cookies") else []
+                print(f"✓ Cookies en memoria del navegador: {[c.get('name') for c in stored]}")
+            except Exception:
+                pass
 
             print(f"• Navegando a la oferta...")
             await tab.go_to(TEST_SHORT_URL)
@@ -154,7 +164,28 @@ async def main():
                     print("¡EXITO TOTAL CON PYDOLL!")
                     print("URL FINAL:", curr)
                     print("🎉" * 25)
-                    break
+                    return
+
+            # Si después de 12s no redirigió, extraer diagnóstico del DOM
+            print("\n--- 🔍 DIAGNÓSTICO DEL CONTENIDO DE LA PÁGINA ---")
+            try:
+                title = await tab.evaluate("document.title")
+                print(f"• Título de la página: {title}")
+            except Exception as e:
+                print(f"• No se pudo obtener título: {e}")
+
+            try:
+                text = await tab.evaluate("document.body.innerText")
+                print(f"• Texto visible en pantalla:\n{text.strip()[:400]}")
+            except Exception as e:
+                print(f"• No se pudo obtener texto: {e}")
+
+            try:
+                links = await tab.evaluate("Array.from(document.querySelectorAll('a')).map(a => a.href)")
+                print(f"• Enlaces encontrados en la página ({len(links)}): {links[:5]}")
+            except Exception:
+                pass
+
     except Exception as e:
         print(f"\n❌ Error en Pydoll: {type(e).__name__}: {e}")
         import traceback
