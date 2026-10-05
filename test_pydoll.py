@@ -169,22 +169,29 @@ async def main():
             # Si después de 12s no redirigió, extraer diagnóstico del DOM
             print("\n--- 🔍 DIAGNÓSTICO DEL CONTENIDO DE LA PÁGINA ---")
             try:
-                title = await tab.evaluate("document.title")
+                title = await tab.execute_script("return document.title;")
                 print(f"• Título de la página: {title}")
             except Exception as e:
                 print(f"• No se pudo obtener título: {e}")
 
             try:
-                text = await tab.evaluate("document.body.innerText")
-                print(f"• Texto visible en pantalla:\n{text.strip()[:400]}")
+                text = await tab.execute_script("return document.body ? document.body.innerText : '';")
+                print(f"• Texto visible en pantalla:\n{str(text).strip()[:400]}")
             except Exception as e:
                 print(f"• No se pudo obtener texto: {e}")
 
             try:
-                links = await tab.evaluate("Array.from(document.querySelectorAll('a')).map(a => a.href)")
-                print(f"• Enlaces encontrados en la página ({len(links)}): {links[:5]}")
-            except Exception:
-                pass
+                ps = await tab.page_source if hasattr(tab, "page_source") else ""
+                print(f"• Tamaño del HTML: {len(ps)} caracteres")
+                # Buscar palabras clave en el HTML
+                keywords = ["cloudflare", "turnstile", "challenge", "autorizado", "redirect", "token", "location"]
+                found = [k for k in keywords if k in ps.lower()]
+                print(f"• Palabras clave detectadas en HTML: {found}")
+                if ps:
+                    clean_snip = " ".join(ps[:500].split())
+                    print(f"• Fragmento HTML: {clean_snip[:300]}")
+            except Exception as e:
+                print(f"• No se pudo obtener page_source: {e}")
 
     except Exception as e:
         print(f"\n❌ Error en Pydoll: {type(e).__name__}: {e}")
