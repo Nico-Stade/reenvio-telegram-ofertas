@@ -100,27 +100,48 @@ async def main():
     options.add_argument("--no-sandbox")
     options.add_argument("--disable-gpu")
     options.add_argument("--disable-dev-shm-usage")
+    options.add_argument("about:blank")
     options.headless = True
 
     print("\n• Iniciando Pydoll Chrome...")
     try:
         async with Chrome(options=options) as browser:
-            tab = await browser.start()
+            try:
+                tab = await browser.start()
+            except Exception as se:
+                print(f"• Aviso en browser.start(): {se}, abriendo con new_tab()...")
+                tab = await browser.new_tab()
+
             print("✓ Pydoll conectado al navegador vía CDP WebSocket!")
 
             # Navegar a dominio para setear cookies
             print("• Inyectando cookies de sesión en ofertasshark.cl...")
             await tab.go_to("https://link.ofertasshark.cl")
+
+            clean_cookies = []
+            for c in raw_cookies:
+                cd = {
+                    "name": c["name"],
+                    "value": c["value"],
+                    "domain": c.get("domain", ".ofertasshark.cl"),
+                    "path": c.get("path", "/"),
+                }
+                clean_cookies.append(cd)
+
             try:
-                await browser.set_cookies(raw_cookies)
-                print("✓ Cookies inyectadas.")
+                await browser.set_cookies(clean_cookies)
+                print("✓ Cookies inyectadas vía browser.set_cookies()")
             except Exception as ce:
-                print(f"Aviso inyectando cookies: {ce}")
+                try:
+                    await tab.set_cookies(clean_cookies)
+                    print("✓ Cookies inyectadas vía tab.set_cookies()")
+                except Exception as ce2:
+                    print(f"Aviso inyectando cookies: {ce2}")
 
             print(f"• Navegando a la oferta...")
             await tab.go_to(TEST_SHORT_URL)
 
-            for i in range(10):
+            for i in range(12):
                 await asyncio.sleep(1)
                 try:
                     curr = await tab.current_url()

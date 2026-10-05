@@ -187,6 +187,91 @@ class SharkLinkResolver:
                 pass
             self._driver = None
 
+    async def _resolve_with_pydoll(self, short_url: str, timeout: int = 12) -> Optional[Tuple[str, Optional[str]]]:
+        """Resolución asíncrona mediante Pydoll conectando directamente al binario Chrome."""
+        from pydoll.browser import Chrome
+        from pydoll.browser.options import ChromiumOptions
+
+        _setup_local_libs_env()
+
+        binary = os.getenv("CHROME_BIN") or os.getenv("CHROME_PATH")
+        if not binary:
+            for sroot in (Path("data"), Path("."), Path("/tmp")):
+                if not sroot.exists():
+                    continue
+                for name in ("chrome", "chromium", "chrome-headless-shell"):
+                    for p in sroot.rglob(name):
+                        if p.is_file() and not p.suffix and "test" not in p.name:
+                            try:
+                                os.chmod(p, 0o755)
+                            except Exception:
+                                pass
+                            binary = str(p.resolve())
+                            break
+                    if binary:
+                        break
+                if binary:
+                    break
+
+        options = ChromiumOptions()
+        if binary:
+            options.binary_location = binary
+        options.add_argument("--no-sandbox")
+        options.add_argument("--disable-gpu")
+        options.add_argument("--disable-dev-shm-usage")
+        options.add_argument("about:blank")
+        options.headless = True
+
+        cookies = self._load_cookies()
+
+        async with Chrome(options=options) as browser:
+            try:
+                tab = await browser.start()
+            except Exception as se:
+                logger.debug(f"[Resolver] browser.start() notificó ({se}), usando new_tab()...")
+                tab = await browser.new_tab()
+
+            # Inyectar cookies en dominio ofertasshark.cl
+            if cookies:
+                await tab.go_to("https://link.ofertasshark.cl")
+                clean_cookies = [
+                    {
+                        "name": c["name"],
+                        "value": c["value"],
+                        "domain": c.get("domain", ".ofertasshark.cl"),
+                        "path": c.get("path", "/"),
+                    }
+                    for c in cookies
+                ]
+                try:
+                    await browser.set_cookies(clean_cookies)
+                except Exception:
+                    try:
+                        await tab.set_cookies(clean_cookies)
+                    except Exception:
+                        pass
+
+            await tab.go_to(short_url)
+            for _ in range(timeout):
+                await asyncio.sleep(1)
+                try:
+                    curr = await tab.current_url()
+                except Exception:
+                    curr = getattr(tab, "url", None)
+
+                if curr and "ofertasshark.cl" not in str(curr):
+                    final_url = str(curr)
+                    store = detect_store_from_url(final_url)
+                    logger.success(f"[Resolver] Redirección exitosa (Pydoll): {final_url[:60]}... (Tienda: {store or 'Desconocida'})")
+                    return final_url, store
+
+            curr = getattr(tab, "url", None)
+            if curr and "ofertasshark.cl" not in str(curr):
+                final_url = str(curr)
+                return final_url, detect_store_from_url(final_url)
+
+        return None
+
     def _resolve_sync(self, short_url: str, timeout: int = 8) -> Tuple[str, Optional[str]]:
         """Lógica síncrona de resolución que corre en un hilo de trabajo."""
         try:
@@ -234,6 +319,20 @@ class SharkLinkResolver:
                 return self._cache[url]
 
             logger.info(f"[Resolver] Resolviendo redirección protegida: {url[:70]}...")
+
+            # 1. Intentar primero con Pydoll si está instalado
+            try:
+                import pydoll
+                pydoll_res = await self._resolve_with_pydoll(url)
+                if pydoll_res and pydoll_res[0] and "ofertasshark.cl" not in pydoll_res[0]:
+                    self._cache[url] = pydoll_res
+                    return pydoll_res
+            except ImportError:
+                pass
+            except Exception as pe:
+                logger.warning(f"[Resolver] Pydoll falló ({pe}), probando con Selenium/UC...")
+
+            # 2. Fallback a Selenium / Undetected-Chromedriver
             result = await asyncio.to_thread(self._resolve_sync, url)
             self._cache[url] = result
             return result
