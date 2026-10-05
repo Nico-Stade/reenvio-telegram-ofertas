@@ -59,6 +59,21 @@ def detect_store_from_url(url: str) -> Optional[str]:
     return None
 
 
+def _setup_local_libs_env():
+    """Configura LD_LIBRARY_PATH si existen librerías de usuario en data/libs."""
+    libs_dir = Path("data/libs")
+    if libs_dir.exists() and sys.platform.startswith("linux"):
+        so_dirs = set()
+        for so_file in libs_dir.rglob("*.so*"):
+            if so_file.is_file():
+                so_dirs.add(str(so_file.parent.resolve()))
+        if so_dirs:
+            ld_str = ":".join(so_dirs)
+            current = os.environ.get("LD_LIBRARY_PATH", "")
+            os.environ["LD_LIBRARY_PATH"] = f"{ld_str}:{current}" if current else ld_str
+            logger.debug(f"[Resolver] LD_LIBRARY_PATH configurado con {len(so_dirs)} carpetas de data/libs")
+
+
 class SharkLinkResolver:
     """
     Resuelve redirecciones de ofertasshark.cl hacia las URLs reales de las tiendas.
@@ -92,6 +107,9 @@ class SharkLinkResolver:
             except Exception:
                 logger.warning("[Resolver] El navegador no responde, reiniciando instancia...")
                 self._close_driver_sync()
+
+        # Configurar librerías locales en data/libs si existen
+        _setup_local_libs_env()
 
         import undetected_chromedriver as uc
 
