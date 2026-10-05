@@ -85,6 +85,9 @@ class SharkLinkResolver:
         self._driver = None
         self._lock = asyncio.Lock()
         self._cache: Dict[str, Tuple[str, Optional[str]]] = {}
+        self.enabled = os.getenv("ENABLE_LINK_RESOLVER", "true").lower() in ("true", "1", "yes")
+        if not self.enabled:
+            logger.info("[Resolver] Resolución de enlaces desactivada (ENABLE_LINK_RESOLVER=false). Se enviarán enlaces directos.")
 
     def _load_cookies(self):
         if not self.cookies_path.exists():
@@ -273,6 +276,17 @@ class SharkLinkResolver:
                     logger.success(f"[Resolver] Redirección exitosa (Pydoll): {final_url[:60]}... (Tienda: {store or 'Desconocida'})")
                     return final_url, store
 
+            # Verificar si Cloudflare bloqueó la IP del servidor
+            try:
+                title_obj = await tab.execute_script("return document.title;")
+                title = str(title_obj)
+                if "Attention Required" in title or "blocked" in title.lower():
+                    logger.warning("[Resolver] Cloudflare bloqueó la IP de este servidor (403). Desactivando resolver automático para procesar ofertas instantáneamente sin demoras.")
+                    self.enabled = False
+                    return short_url, None
+            except Exception:
+                pass
+
             curr = getattr(tab, "url", None)
             if curr and "ofertasshark.cl" not in str(curr):
                 final_url = str(curr)
@@ -285,6 +299,12 @@ class SharkLinkResolver:
         try:
             self._ensure_driver()
             self._driver.get(short_url)
+
+            # Si Cloudflare bloqueó la IP con 403
+            if "Attention Required" in self._driver.title or "blocked" in self._driver.title.lower():
+                logger.warning("[Resolver] Cloudflare bloqueó la IP de este servidor (403). Desactivando resolver automático.")
+                self.enabled = False
+                return short_url, None
 
             final_url = None
             for _ in range(timeout):
@@ -311,7 +331,7 @@ class SharkLinkResolver:
         Resuelve una URL acortada de ofertasshark.cl a su enlace genuino de tienda.
         Retorna (url_final, nombre_tienda).
         """
-        if not url:
+        if not self.enabled or not url:
             return url, None
 
         if "ofertasshark.cl" not in url:
