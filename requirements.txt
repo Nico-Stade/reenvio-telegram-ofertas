@@ -3,3 +3,5 @@ python-dotenv==1.0.1
 apscheduler==3.10.4
 loguru==0.7.2
 httpx>=0.28.0
+undetected-chromedriver>=3.5.5
+pydoll-python>=3.0.0

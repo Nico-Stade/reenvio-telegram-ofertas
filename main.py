@@ -217,15 +217,18 @@ async def main():
             sources=sources,
         )
 
-        if backfill_limit is not None or is_dry_run:
-            limit = backfill_limit or 15
-            logger.info(f"Ejecutando backfill de los últimos {limit} mensajes...")
-            await engine.run_backfill(limit=limit, target_channel=target_channel)
-            return
+        try:
+            if backfill_limit is not None or is_dry_run:
+                limit = backfill_limit or 15
+                logger.info(f"Ejecutando backfill de los últimos {limit} mensajes...")
+                await engine.run_backfill(limit=limit, target_channel=target_channel)
+                return
 
-        # Modo en vivo continuo (eventos en tiempo real)
-        logger.info("Iniciando escucha en tiempo real. Presioná Ctrl+C para salir.")
-        await engine.run_live()
+            # Modo en vivo continuo (eventos en tiempo real)
+            logger.info("Iniciando escucha en tiempo real. Presioná Ctrl+C para salir.")
+            await engine.run_live()
+        finally:
+            await engine.close()
 
 
 if __name__ == "__main__":

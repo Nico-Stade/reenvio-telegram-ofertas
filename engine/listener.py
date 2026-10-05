@@ -13,6 +13,7 @@ from core.client import parse_peer
 from engine.parser import BaseDealParser, BunnyDealParser
 from engine.filters.pipeline import FilterPipeline
 from engine.dispatchers.bot_dispatcher import TelegramBotDispatcher
+from engine.resolver import SharkLinkResolver
 
 
 @dataclass
@@ -46,6 +47,7 @@ class DealForwarderEngine:
         self.dispatcher = dispatcher
         self.repository = repository
         self.default_pipeline = default_pipeline or pipeline
+        self.resolver = SharkLinkResolver()
 
         # Inicialización de fuentes
         self.sources: List[ChannelSourceConfig] = []
@@ -120,6 +122,14 @@ class DealForwarderEngine:
             logger.debug(f"[Engine] Mensaje {message_id} de {channel_name} no es una oferta estructurada.")
             return False
 
+        # Si el deal tiene un enlace protegido (ofertasshark.cl), resolverlo a la tienda real
+        if deal.product_url and "ofertasshark.cl" in deal.product_url:
+            resolved_url, detected_store = await self.resolver.resolve(deal.product_url)
+            if resolved_url:
+                deal.product_url = resolved_url
+            if detected_store and not deal.store:
+                deal.store = detected_store
+
         # 1. Pipeline de filtros
         result = await pipeline.execute(deal)
         if not result.passed:
@@ -191,3 +201,8 @@ class DealForwarderEngine:
             total_approved += approved_count
 
         return total_approved
+
+    async def close(self):
+        """Libera los recursos del motor y del navegador de resolución."""
+        if hasattr(self, "resolver"):
+            await self.resolver.close()

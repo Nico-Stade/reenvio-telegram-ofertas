@@ -11,6 +11,8 @@
 data/*.db
 data/*.sqlite
 data/*.json
+data/chrome_profile/
+scratch/
 *.db
 *.sqlite
 
