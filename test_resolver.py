@@ -1,12 +1,12 @@
 """
 test_resolver.py — Script de prueba directa del servicio de resolución de enlaces.
-Permite diagnosticar Chrome, cookies y redirecciones con un solo comando sin depender de Telegram.
+Permite diagnosticar Chrome, cookies, librerías del sistema y redirecciones.
 """
 import sys
 import os
 import asyncio
+import subprocess
 from pathlib import Path
-from loguru import logger
 
 # Asegurar UTF-8 en salida estándar
 if hasattr(sys.stdout, "reconfigure"):
@@ -25,13 +25,21 @@ async def run_diagnostics():
     print(f"• Versión de Python : {sys.version.split()[0]}")
     print(f"• Directorio actual : {os.getcwd()}")
 
-    cookies_path = Path("data/shark_cookies.json")
-    print(f"• Archivo de cookies: {cookies_path} -> {'✓ EXISTE' if cookies_path.exists() else '❌ NO EXISTE'}")
+    # Verificar distribución Linux
+    if Path("/etc/os-release").exists():
+        try:
+            with open("/etc/os-release") as f:
+                lines = [l.strip() for l in f if "PRETTY_NAME" in l]
+                if lines:
+                    print(f"• Linux Distro      : {lines[0].split('=')[-1].strip('\"')}")
+        except Exception:
+            pass
 
-    resolver = SharkLinkResolver()
+    cookies_path = Path("data/shark_cookies.json")
+    print(f"• Archivo de cookies: {cookies_path} -> {'✓ EXISTE' if cookies_path.exists() else '❌ NO EXISTE (Copia tu data/shark_cookies.json)'}")
 
     # Diagnóstico de binarios en el sistema
-    print("\n--- Búsqueda de binarios de Chrome/Chromium ---")
+    print("\n--- 1. Búsqueda y prueba directa de binarios ---")
     search_dirs = [Path("data"), Path("."), Path("/tmp"), Path("/usr/bin")]
     found_binaries = []
     for sroot in search_dirs:
@@ -44,16 +52,23 @@ async def run_diagnostics():
                 except Exception:
                     pass
 
-    if found_binaries:
-        print(f"✓ Binarios detectados ({len(found_binaries)}):")
-        for b in found_binaries:
-            print(f"   -> {b}")
-    else:
-        print("⚠️ No se encontró ningún binario en data/, raíz o /tmp.")
+    # Buscar también el binario descargado por undetected_chromedriver
+    uc_path = Path(os.path.expanduser("~")) / ".local/share/undetected_chromedriver/undetected_chromedriver"
+    if uc_path.exists():
+        found_binaries.append(str(uc_path.resolve()))
 
-    print("\n--- Probando resolución de enlace ---")
-    print(f"URL de entrada: {TEST_SHORT_URL[:70]}...")
+    for b in set(found_binaries):
+        try:
+            os.chmod(b, 0o755)
+            res = subprocess.run([b, "--version"], capture_output=True, text=True, timeout=5)
+            out = (res.stdout or res.stderr).strip()
+            print(f"  • {b} -> Retcode: {res.returncode} | Output: {out[:60]}")
+        except Exception as e:
+            print(f"  • {b} -> ❌ Error al ejecutar: {e}")
 
+    # Probar resolución con el resolver
+    print("\n--- 2. Probando resolución con SharkLinkResolver ---")
+    resolver = SharkLinkResolver()
     start_time = asyncio.get_event_loop().time()
     try:
         final_url, store = await resolver.resolve(TEST_SHORT_URL)
