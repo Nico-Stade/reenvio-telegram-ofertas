@@ -1,6 +1,6 @@
 {
   "source_channel": "-1002230433964",
-  "destination_channel": "-1003952548471",
+  "destination_channel": "-1003717939030",
   "filters": {
     "min_discount": 60,
     "strict_historical_low": true,

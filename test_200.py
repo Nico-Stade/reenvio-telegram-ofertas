@@ -146,7 +146,7 @@ async def run_testing_200(min_drop: float = 25.0, dry_run: bool = False, limit: 
 
 def main():
     arg_parser = argparse.ArgumentParser(description="Testing de 200 mensajes con filtro agresivo de caída vs histórico.")
-    arg_parser.add_argument("--min-drop", type=float, default=40.0, help="Porcentaje mínimo de caída respecto al récord histórico (default: 25.0)")
+    arg_parser.add_argument("--min-drop", type=float, default=60.0, help="Porcentaje mínimo de caída respecto al récord histórico (default: 25.0)")
     arg_parser.add_argument("--dry-run", action="store_true", help="Solo analizar y listar sin enviar al bot")
     arg_parser.add_argument("--limit", type=int, default=200, help="Cantidad de mensajes a inspeccionar (default: 200)")
     args = arg_parser.parse_args()
