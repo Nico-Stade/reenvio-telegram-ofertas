@@ -1,0 +1,17 @@
+{
+  "source_channel": "-1002230433964",
+  "destination_channel": "-1003952548471",
+  "filters": {
+    "min_discount": 60,
+    "strict_historical_low": true,
+    "min_drop_percentage": 60.0,
+    "allow_no_history": false,
+    "dedup_window_hours": 12,
+    "allowed_stores": [],
+    "blocked_stores": []
+  },
+  "options": {
+    "include_inline_button": true,
+    "show_above_text": false
+  }
+}

@@ -1,0 +1,43 @@
+# Environment & Secrets (CRITICAL)
+.env
+.env.*
+!.env.example
+
+# Telegram Telethon Session Files (CRITICAL: Do NOT leak MTProto session)
+*.session
+*.session-journal
+
+# Local SQLite Database & Runtime Data
+data/*.db
+data/*.sqlite
+data/*.json
+*.db
+*.sqlite
+
+# Python Virtual Environment
+venv/
+.venv/
+env/
+ENV/
+
+# Python Bytecode & Cache
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.pytest_cache/
+
+# IDE & Editors
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Operating System Files
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Logs
+*.log
+logs/

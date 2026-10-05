@@ -1,0 +1,16 @@
+version: "3.9"
+
+services:
+  forwarder:
+    build: .
+    container_name: telegram-forwarder
+    restart: unless-stopped
+    env_file:
+      - .env
+    volumes:
+      # Persiste el estado entre reinicios del contenedor
+      - ./data:/app/data
+      # Persiste la sesión Telethon (modo archivo .session)
+      - ./sessions:/app
+    environment:
+      - PYTHONUNBUFFERED=1
