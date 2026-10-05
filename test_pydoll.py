@@ -90,6 +90,21 @@ async def main():
         raw_cookies = json.load(f)
     print(f"• Cookies cargadas: {len(raw_cookies)} desde {cookies_path}")
 
+    # Comprobar conectividad directa de la IP del contenedor con Cloudflare
+    import urllib.request
+    print("\n--- Comprobando si Cloudflare acepta la IP del contenedor ---")
+    try:
+        req = urllib.request.Request(
+            "https://link.ofertasshark.cl",
+            headers={"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"}
+        )
+        with urllib.request.urlopen(req, timeout=5) as resp:
+            print(f"• Conexión HTTP: Status {resp.status} (IP aceptada por Cloudflare)")
+    except urllib.error.HTTPError as he:
+        print(f"• Conexión HTTP: Status {he.code} ({he.reason})")
+    except Exception as ex:
+        print(f"• Conexión HTTP directa: {ex}")
+
     # 3. Iniciar Pydoll
     from pydoll.browser import Chrome
     from pydoll.browser.options import ChromiumOptions
@@ -100,12 +115,14 @@ async def main():
     options.add_argument("--no-sandbox")
     options.add_argument("--disable-gpu")
     options.add_argument("--disable-dev-shm-usage")
-    # Evitar fingerprint de headless para no ser bloqueado por Cloudflare
+    # Eliminar bandera de automatización navigator.webdriver
+    options.add_argument("--disable-blink-features=AutomationControlled")
+    # User agent de escritorio idéntico a Chrome real
     options.add_argument("--user-agent=Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Safari/537.36")
     options.add_argument("about:blank")
     options.headless = True
 
-    print("\n• Iniciando Pydoll Chrome con User-Agent de escritorio...")
+    print("\n• Iniciando Pydoll Chrome con flags anti-detección...")
     try:
         async with Chrome(options=options) as browser:
             try:
@@ -116,12 +133,24 @@ async def main():
 
             print("✓ Pydoll conectado al navegador vía CDP WebSocket!")
 
+            # Ocultar navigator.webdriver en el contexto
+            try:
+                await tab.execute_script("Object.defineProperty(navigator, 'webdriver', {get: () => undefined});")
+            except Exception:
+                pass
+
             # Navegar a dominio para setear cookies
             print("• Navegando a ofertasshark.cl e inyectando cookies...")
             await tab.go_to("https://link.ofertasshark.cl")
 
+            # IMPORTANTE: cf_clearance está atada a la IP residencial donde se generó.
+            # Al enviarla desde el contenedor, Cloudflare detecta la discrepancia de IP y bloquea.
+            # user_token es el JWT de autenticación de usuario y ese sí es universal.
             all_cookies = []
             for c in raw_cookies:
+                if c["name"] == "cf_clearance":
+                    print(f"• Omitiendo {c['name']} (evitar bloqueo por cambio de IP)")
+                    continue
                 for domain in [".ofertasshark.cl", "link.ofertasshark.cl"]:
                     cd = {
                         "name": c["name"],

@@ -92,7 +92,12 @@ class SharkLinkResolver:
             return []
         try:
             with open(self.cookies_path, "r", encoding="utf-8") as f:
-                return json.load(f)
+                raw = json.load(f)
+            # En Linux / contenedor, cf_clearance pertenece a la IP original donde se generó
+            # y Cloudflare bloquea por discrepancia de IP. Solo user_token es seguro entre máquinas.
+            if sys.platform.startswith("linux"):
+                return [c for c in raw if c.get("name") != "cf_clearance"]
+            return raw
         except Exception as e:
             logger.error(f"[Resolver] Error cargando cookies: {e}")
             return []
@@ -118,6 +123,7 @@ class SharkLinkResolver:
         options.add_argument("--no-sandbox")
         options.add_argument("--disable-gpu")
         options.add_argument("--disable-dev-shm-usage")
+        options.add_argument("--disable-blink-features=AutomationControlled")
 
         # Si corre en Linux sin pantalla (entorno contenedor como bot-hosting), usar headless
         is_linux_headless = sys.platform.startswith("linux") and not os.environ.get("DISPLAY")
@@ -219,6 +225,8 @@ class SharkLinkResolver:
         options.add_argument("--no-sandbox")
         options.add_argument("--disable-gpu")
         options.add_argument("--disable-dev-shm-usage")
+        options.add_argument("--disable-blink-features=AutomationControlled")
+        options.add_argument("--user-agent=Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Safari/537.36")
         options.add_argument("about:blank")
         options.headless = True
 
