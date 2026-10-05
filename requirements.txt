@@ -5,3 +5,4 @@ loguru==0.7.2
 httpx>=0.28.0
 undetected-chromedriver>=3.5.5
 pydoll-python>=3.0.0
+setuptools>=70.0.0
