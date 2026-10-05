@@ -65,7 +65,7 @@ def _setup_local_libs_env():
     if libs_dir.exists() and sys.platform.startswith("linux"):
         so_dirs = set()
         for so_file in libs_dir.rglob("*.so*"):
-            if so_file.is_file():
+            if so_file.is_file() or so_file.is_symlink():
                 so_dirs.add(str(so_file.parent.resolve()))
         if so_dirs:
             ld_str = ":".join(so_dirs)
@@ -161,7 +161,8 @@ class SharkLinkResolver:
         kwargs = {"options": options}
         if chrome_bin:
             logger.info(f"[Resolver] Usando binario Chrome: {chrome_bin}")
-            kwargs["browser_executable_path"] = chrome_bin
+            options.binary_location = str(chrome_bin)
+            kwargs["browser_executable_path"] = str(chrome_bin)
 
         driver = uc.Chrome(**kwargs)
 

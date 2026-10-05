@@ -15,10 +15,27 @@ if hasattr(sys.stdout, "reconfigure"):
 TEST_SHORT_URL = "https://link.ofertasshark.cl/link/v2/redirect?e=a9DMMVTLRG0_UI_D4P3NZ3K5Ra251FiVlp64ekPBlEYlIJ7iBOseUhHlY4B5NkD6AXYJEQYcNnSx9A0FMoYUr3HopBwOD_lu9k0acZWqJ78-WlaheY_iYKITcRLOsBn7beI1ONbJPMRbZvm3w486EIyeyeTKN12Ch4DetYouXFz4BfkGTbsovvAgqKYx93LkajbrDlOltjE4ZM4ACpYJbzQO_ecnvdUD1A4Y7WNSdh0F6sgQ-ZUacnjMGNTNkG_MjYoah-t2gxq8Oy9A-8CPHQ8RWsULgLpMya48aBn2Bx_QxS6c3lNsE9GTiWnxX6iw-XwWsXAG&_tl=ba9988d60521b78d8b912850f7833fd4"
 
 
+def setup_local_libs_env():
+    libs_dir = Path("data/libs")
+    if libs_dir.exists() and sys.platform.startswith("linux"):
+        so_dirs = set()
+        for so_file in libs_dir.rglob("*.so*"):
+            if so_file.is_file() or so_file.is_symlink():
+                so_dirs.add(str(so_file.parent.resolve()))
+        if so_dirs:
+            ld_str = ":".join(so_dirs)
+            current = os.environ.get("LD_LIBRARY_PATH", "")
+            os.environ["LD_LIBRARY_PATH"] = f"{ld_str}:{current}" if current else ld_str
+            print(f"• LD_LIBRARY_PATH configurado con {len(so_dirs)} carpetas de data/libs")
+
+
 async def main():
     print("=" * 65)
     print("🚀 PROBANDO RESOLUCIÓN CON PYDOLL (SIN CHROMEDRIVER)")
     print("=" * 65)
+
+    # 0. Configurar variables de entorno para librerías locales
+    setup_local_libs_env()
 
     # 1. Buscar binario
     candidates = [
@@ -35,7 +52,7 @@ async def main():
 
     if not binary:
         for p in Path("data").rglob("chrome*"):
-            if p.is_file():
+            if p.is_file() and not p.suffix and "test" not in p.name:
                 binary = str(p.resolve())
                 break
 
@@ -45,22 +62,21 @@ async def main():
     if binary:
         try:
             os.chmod(binary, 0o755)
-            chk = subprocess.run([binary, "--version"], capture_output=True, text=True, timeout=5)
+            chk = subprocess.run([binary, "--version"], capture_output=True, text=True, timeout=5, env=os.environ)
             err_msg = (chk.stderr or chk.stdout).strip()
-            print(f"• Ejecución binario: retcode={chk.returncode}")
-            if err_msg:
-                print(f"• Salida/Error binario:\n  {err_msg}")
+            print(f"• Ejecución binario: retcode={chk.returncode} | salida={err_msg[:60]}")
             
             # Revisar dependencias faltantes con ldd
-            try:
-                ldd = subprocess.run(["ldd", binary], capture_output=True, text=True, timeout=5)
-                missing = [line.strip() for line in ldd.stdout.splitlines() if "not found" in line]
-                if missing:
-                    print(f"• ⚠️ Librerías Linux faltantes ({len(missing)}):")
-                    for m in missing[:10]:
-                        print(f"     {m}")
-            except Exception:
-                pass
+            if chk.returncode != 0:
+                try:
+                    ldd = subprocess.run(["ldd", binary], capture_output=True, text=True, timeout=5, env=os.environ)
+                    missing = [line.strip() for line in ldd.stdout.splitlines() if "not found" in line]
+                    if missing:
+                        print(f"• ⚠️ Librerías Linux faltantes ({len(missing)}):")
+                        for m in missing[:10]:
+                            print(f"     {m}")
+                except Exception:
+                    pass
         except Exception as e:
             print(f"• ❌ Error al invocar binario directamente: {e}")
 
@@ -89,26 +105,30 @@ async def main():
     print("\n• Iniciando Pydoll Chrome...")
     try:
         async with Chrome(options=options) as browser:
-            tabs = await browser.get_opened_tabs()
-            tab = tabs[0] if tabs else await browser.new_tab()
+            tab = await browser.start()
             print("✓ Pydoll conectado al navegador vía CDP WebSocket!")
 
             # Navegar a dominio para setear cookies
+            print("• Inyectando cookies de sesión en ofertasshark.cl...")
             await tab.go_to("https://link.ofertasshark.cl")
-            for c in raw_cookies:
-                try:
-                    await browser.set_cookies([c])
-                except Exception:
-                    pass
+            try:
+                await browser.set_cookies(raw_cookies)
+                print("✓ Cookies inyectadas.")
+            except Exception as ce:
+                print(f"Aviso inyectando cookies: {ce}")
 
             print(f"• Navegando a la oferta...")
             await tab.go_to(TEST_SHORT_URL)
 
             for i in range(10):
                 await asyncio.sleep(1)
-                curr = await tab.current_url()
-                print(f"  [{i+1}s] URL: {curr[:70]}")
-                if curr and "ofertasshark.cl" not in curr:
+                try:
+                    curr = await tab.current_url()
+                except Exception:
+                    curr = getattr(tab, "url", None)
+
+                print(f"  [{i+1}s] URL: {str(curr)[:70]}")
+                if curr and "ofertasshark.cl" not in str(curr):
                     print("\n" + "🎉" * 25)
                     print("¡EXITO TOTAL CON PYDOLL!")
                     print("URL FINAL:", curr)
@@ -116,6 +136,8 @@ async def main():
                     break
     except Exception as e:
         print(f"\n❌ Error en Pydoll: {type(e).__name__}: {e}")
+        import traceback
+        traceback.print_exc()
 
 
 if __name__ == "__main__":
