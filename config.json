@@ -1,6 +1,22 @@
 {
-  "source_channel": "-1002230433964",
-  "destination_channel": "-1003717939030",
+  "sources": [
+    {
+      "channel_id": "-1002230433964",
+      "name": "Bunny 60% OFF",
+      "parser": "bunny"
+    },
+    {
+      "channel_id": "-1001630413456",
+      "name": "🐘 70% - 99% Nypau 🐘",
+      "parser": "nypau"
+    },
+    {
+      "channel_id": "-1001815551781",
+      "name": "🔥🔥🐘🐘 ALERTA DE OFERTAS🐘🐘🔥🔥",
+      "parser": "nypau"
+    }
+  ],
+  "destination_channel": "-1003952548471",
   "filters": {
     "min_discount": 60,
     "strict_historical_low": true,

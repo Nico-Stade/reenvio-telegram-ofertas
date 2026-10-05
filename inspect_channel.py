@@ -1,11 +1,11 @@
 """
 inspect_channel.py — Muestra los últimos N mensajes de un canal.
-Útil para ver el contenido exacto antes de configurar find_replace.
+Útil para ver el contenido exacto y verificar el parsing de diferentes proveedores (Bunny, Nypau, etc.).
 
 Uso:
   python inspect_channel.py -c @canal_o_id -n 10
-  python inspect_channel.py -c -1002023523123 -n 20
-  python inspect_channel.py -c -1002023523123 -n 20 --parse
+  python inspect_channel.py -c -1001630413456 -n 10 --parse
+  python inspect_channel.py -c -1001815551781 -n 10 --parse --parser nypau
   python inspect_channel.py -c -1002023523123 -n 20 --json
 """
 import asyncio
@@ -20,7 +20,7 @@ if sys.stdout.encoding != "utf-8":
 from dotenv import load_dotenv
 
 from core.client import build_client, parse_peer as _parse_peer
-from engine.parser import BunnyDealParser
+from engine.parser import get_parser, detect_parser, BaseDealParser
 
 load_dotenv()
 
@@ -35,6 +35,9 @@ def _print_parsed(deal) -> None:
     print(f"  Precio original : {deal.original_price:,}" if deal.original_price else "  Precio original : —")
     print(f"  Precio oferta   : {deal.offer_price:,}" if deal.offer_price else "  Precio oferta   : —")
     print(f"  Descuento       : {deal.discount_percentage}%" if deal.discount_percentage else "  Descuento       : —")
+    if deal.min_historical_price:
+        drop = deal.discount_vs_history
+        print(f"  Récord histórico: ${deal.min_historical_price:,} (Rebaja real: -{drop}%)")
     if deal.history:
         print(f"  Historial       :")
         for h in deal.history:
@@ -46,9 +49,9 @@ def _print_parsed(deal) -> None:
     print()
 
 
-async def inspect(channel: str, limit: int, parse: bool, as_json: bool) -> None:
+async def inspect(channel: str, limit: int, parse: bool, parser_name: str, as_json: bool) -> None:
     client = build_client()
-    parser = BunnyDealParser()
+    explicit_parser = get_parser(parser_name) if parser_name != "auto" else None
 
     async with client:
         if not await client.is_user_authorized():
@@ -68,14 +71,18 @@ async def inspect(channel: str, limit: int, parse: bool, as_json: bool) -> None:
                     "texto": msg.text or "",
                 }
                 if msg.text:
-                    d = parser.parse(msg.id, msg.text, channel)
+                    p = explicit_parser or detect_parser(msg.text)
+                    d = p.parse(msg.id, msg.text, channel)
                     if d:
                         record["parsed"] = {
+                            "parser": type(p).__name__,
                             "tienda": d.store,
                             "nombre_producto": d.title,
                             "descuento": d.discount_percentage,
                             "precio_original": d.original_price,
                             "precio_oferta": d.offer_price,
+                            "min_historico": d.min_historical_price,
+                            "rebaja_vs_historia": d.discount_vs_history,
                             "historico": [{"precio": h.price, "fecha": h.date} for h in d.history],
                             "url_producto": d.product_url,
                             "url_imagen": d.image_url,
@@ -93,7 +100,8 @@ async def inspect(channel: str, limit: int, parse: bool, as_json: bool) -> None:
             fecha = msg.date.strftime("%Y-%m-%d %H:%M:%S")
 
             if parse and msg.text:
-                d = parser.parse(msg.id, msg.text, channel)
+                p = explicit_parser or detect_parser(msg.text)
+                d = p.parse(msg.id, msg.text, channel)
                 if d:
                     _print_parsed(d)
                 else:
@@ -122,10 +130,11 @@ def main():
     parser.add_argument("-c", "--channel", required=True, help="Username (@canal) o ID numérico del canal")
     parser.add_argument("-n", "--limit", type=int, default=10, help="Cantidad de mensajes a mostrar (default: 10)")
     parser.add_argument("--parse", action="store_true", help="Parsear campos estructurados (producto, precio, historial, etc.)")
+    parser.add_argument("--parser", default="auto", choices=["auto", "bunny", "nypau"], help="Parser a utilizar (default: auto)")
     parser.add_argument("--json", action="store_true", dest="as_json", help="Exportar output como JSON (incluye texto crudo + parsed)")
     args = parser.parse_args()
 
-    asyncio.run(inspect(args.channel, args.limit, parse=args.parse, as_json=args.as_json))
+    asyncio.run(inspect(args.channel, args.limit, parse=args.parse, parser_name=args.parser, as_json=args.as_json))
 
 
 if __name__ == "__main__":

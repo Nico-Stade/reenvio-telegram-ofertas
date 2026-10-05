@@ -1,6 +1,6 @@
 # 🪡 Ofertas Aguja — Telegram Deal Forwarder Pro
 
-Sistema profesional de monitoreo, filtrado inteligente y reenvío de ofertas en Telegram en tiempo real (< 50ms de latencia). 
+Sistema profesional de monitoreo, filtrado inteligente y reenvío de ofertas en Telegram en tiempo real (< 50ms de latencia) con soporte **Multi-Canal** y **Multi-Proveedor** (Bunny, Nypau / Shark, etc.).
 
 Diseñado con **arquitectura limpia orientada a objetos (POO)**, ingesta pasiva mediante **Telethon (Userbot MTProto)**, filtrado matemático estricto contra **mínimos históricos (Anti-Ruido)** y despacho mediante la **API oficial de Bots de Telegram** en formato Embed.
 
@@ -8,12 +8,15 @@ Diseñado con **arquitectura limpia orientada a objetos (POO)**, ingesta pasiva 
 
 ## 🌟 Características Principales
 
-* ⚡ **Ingesta en Tiempo Real (< 50ms)**: Basado en eventos (`events.NewMessage`) mediante Telethon MTProto. Cero latencia respecto al polling tradicional.
+* ⚡ **Ingesta Multi-Canal en Tiempo Real (< 50ms)**: Monitorea múltiples canales simultáneamente basados en eventos (`events.NewMessage`) mediante Telethon MTProto. Cero latencia respecto al polling tradicional.
+* 🧩 **Procesadores Especializados por Proveedor (POO)**:
+  * `BunnyDealParser`: Especializado en canales de Bunny con hashtags de tienda, bloques de historial `$PRECIO - DD/MM/YYYY` y links directos.
+  * `NypauDealParser`: Especializado en canales de Nypau / Shark (`🐘 70% - 99% Nypau 🐘`, `🔥🔥🐘🐘 ALERTA DE OFERTAS🐘🐘🔥🔥`), con soporte para enlaces de redirección Cloudflare (`link.ofertasshark.cl`), formato de historial invertido `DD/MM/YYYY $PRECIO` y discriminación automática de mensajes no estructurados (charlas, textos libres, enlaces sueltos).
 * 🛡️ **Seguridad Total Anti-Ban**: Arquitectura desacoplada. Tu cuenta personal únicamente **lee** canales privados/VIP (cero riesgo de baneo por spam), mientras que el despacho se realiza a través de un **Bot Oficial** de Telegram con alta tolerancia de envío.
 * 📉 **Filtro Anti-Ruido (Mínimo Histórico Real)**: Compara el precio de oferta actual contra el récord histórico más bajo registrado en el producto. Descarta descuentos falsos basados en precios de lista inflados y permite configurar un umbral agresivo de caída (ej: solo alertas que bajen $\ge 60\%$ respecto a su mínimo histórico).
-* 🎨 **Diseño Visual "Ofertas Aguja"**: Formato embed limpio, ordenado y de alta conversión. Muestra el título en negrita, la tienda, el salto de precio con flecha `➜`, el historial completo de precios y un botón interactivo `[🛍️ Obtener Oferta]`.
+* 🎨 **Diseño Visual "Ofertas Aguja"**: Formato embed limpio, ordenado y de alta conversión. Muestra el título en negrita, la marca, el salto de precio con flecha `➜`, el historial completo de precios y un botón interactivo `[🛍️ Obtener Oferta]`.
 * 🗄️ **Persistencia y Deduplicación Local (SQLite)**: Registra cada oferta en `data/deals.db` para evitar reenviar productos duplicados en ventanas de tiempo configurables (ej: 12 horas).
-* 🔍 **Herramientas de Auditoría y Backfill Incluidas**: Script `test_200.py` para analizar los últimos 200 mensajes de cualquier canal y rescatar únicamente las mejores ofertas bomba.
+* 🔍 **Herramientas de Auditoría y Backfill Incluidas**: Script `test_200.py` e `inspect_channel.py` para analizar mensajes de cualquier canal y rescatar únicamente las mejores ofertas bomba.
 
 ---
 
@@ -28,8 +31,8 @@ ofertas-aguja/
 │   └── models.py            # Modelos de dominio tipados (DealItem, HistoricalEntry, FilterResult)
 │
 ├── engine/
-│   ├── parser.py            # Parser orientado a objetos (BunnyDealParser)
-│   ├── listener.py          # Motor de eventos en vivo y backfill (DealForwarderEngine)
+│   ├── parser.py            # Parsers orientados a objetos (BunnyDealParser, NypauDealParser, get_parser)
+│   ├── listener.py          # Motor de eventos multi-canal y backfill (DealForwarderEngine, ChannelSourceConfig)
 │   │
 │   ├── filters/             # Pipeline desacoplado (Chain of Responsibility)
 │   │   ├── base.py          # Interfaz BaseFilter
@@ -46,9 +49,9 @@ ofertas-aguja/
 │       └── bot_dispatcher.py  # Despachador asíncrono Telegram Bot API (httpx) con manejo 429
 │
 ├── config.json              # Configuración de canales, umbrales y opciones visuales
-├── inspect_channel.py       # Utilidad para inspeccionar mensajes crudos y parseados de un canal
+├── inspect_channel.py       # Utilidad para inspeccionar mensajes crudos y parseados de cualquier proveedor
 ├── test_200.py              # Auditoría y testing masivo de los últimos 200 mensajes
-├── main.py                  # Entry point de producción
+├── main.py                  # Entry point de producción multi-canal
 └── requirements.txt         # Dependencias del proyecto
 ```
 
@@ -95,17 +98,31 @@ SESSION_NAME=telegram_forwarder
 BOT_TOKEN=123456789:ABCdefGHIjklMNOpqrsTUVwxyz
 ```
 
-> **Nota:** La primera vez que ejecutes el script, Telethon te pedirá tu número de teléfono y el código de verificación de Telegram por consola para generar el archivo de sesión seguro local.
-
 ---
 
 ## ⚙️ Configuración (`config.json`)
 
-Edita `config.json` para definir tus canales de origen, destino y umbrales:
+`config.json` soporta una lista de canales fuente (`sources`), cada uno asociado a su procesador correspondiente:
 
 ```json
 {
-  "source_channel": "-1002230433964",
+  "sources": [
+    {
+      "channel_id": "-1002230433964",
+      "name": "Bunny 60% OFF",
+      "parser": "bunny"
+    },
+    {
+      "channel_id": "-1001630413456",
+      "name": "🐘 70% - 99% Nypau 🐘",
+      "parser": "nypau"
+    },
+    {
+      "channel_id": "-1001815551781",
+      "name": "🔥🔥🐘🐘 ALERTA DE OFERTAS🐘🐘🔥🔥",
+      "parser": "nypau"
+    }
+  ],
   "destination_channel": "-1003952548471",
   "filters": {
     "min_discount": 60,
@@ -123,16 +140,20 @@ Edita `config.json` para definir tus canales de origen, destino y umbrales:
 }
 ```
 
+> **Canales de destino habituales:**
+> - Canal de Testing: `-1003952548471`
+> - Canal Oficial (Ofertas Aguja): `-1003717939030`
+
 ### Explicación de parámetros:
 | Parámetro | Tipo | Descripción |
 |---|---|---|
-| `source_channel` | `string` | ID numérico o `@username` del canal fuente a monitorear. |
-| `destination_channel` | `string` | ID numérico o `@username` del canal donde el bot publicará. |
-| `filters.min_discount` | `int` | Porcentaje de descuento mínimo que debe anunciar la oferta. |
-| `filters.strict_historical_low` | `bool` | Exige que el precio sea menor o igual al récord histórico previo. |
-| `filters.min_drop_percentage` | `float` | Caída porcentual mínima respecto al mínimo histórico (ej: `60.0` para casos bomba). |
+| `sources` | `list` | Lista de canales a monitorear. Cada elemento define `channel_id`, `name` y `parser` (`bunny` o `nypau`). |
+| `destination_channel` | `string` | ID numérico del canal donde el bot publicará (Testing o Producción). |
+| `filters.min_discount` | `int` | Porcentaje de descuento mínimo anunciado respecto al precio de lista. |
+| `filters.strict_historical_low` | `bool` | Exige que el precio sea menor o igual al récord histórico más bajo previo. |
+| `filters.min_drop_percentage` | `float` | Caída porcentual mínima requerida respecto al mínimo histórico (ej: `60.0` para cazar anomalías/errores de precio). |
 | `filters.allow_no_history` | `bool` | Si `false`, descarta ofertas que no traigan bloque de historial verificable. |
-| `filters.dedup_window_hours` | `int` | Ventana en horas para no reenviar el mismo producto repetido. |
+| `filters.dedup_window_hours` | `int` | Ventana en horas para evitar reenviar el mismo producto. |
 | `options.include_inline_button` | `bool` | Si añade el botón interactivo `[🛍️ Obtener Oferta]`. |
 | `options.show_above_text` | `bool` | Posición del embed: `false` pone el texto primero y la foto abajo; `true` foto arriba. |
 
@@ -140,16 +161,21 @@ Edita `config.json` para definir tus canales de origen, destino y umbrales:
 
 ## 💻 Modos de Uso
 
-### Modo Producción (Escucha en vivo 24/7)
-Inicia la escucha en tiempo real por eventos de Telegram:
+### Modo Producción (Escucha en vivo 24/7 de todos los canales)
+Inicia la escucha en tiempo real de todos los canales configurados:
 ```bash
 python main.py
 ```
 
 ### Modo Backfill (Recuperar mensajes recientes)
-Analiza y procesa los últimos `N` mensajes históricos:
+Analiza y procesa los últimos `N` mensajes de cada canal configurado:
 ```bash
 python main.py --backfill 15
+```
+
+O para un canal específico:
+```bash
+python main.py --backfill 15 --channel -1001815551781
 ```
 
 ### Modo Simulación (Dry-Run)
@@ -158,19 +184,13 @@ Prueba los filtros sobre mensajes recientes sin enviar nada al bot:
 python main.py --dry-run
 ```
 
-### Herramienta de Auditoría Masiva (`test_200.py`)
-Inspecciona los últimos 200 mensajes del canal con filtros agresivos de caída:
-```bash
-# Ver en consola las mayores caídas sin publicar:
-python test_200.py --dry-run --min-drop 40
-
-# Publicar al canal destino solo las ofertas que cayeron >= 60% vs histórico:
-python test_200.py --min-drop 60
-```
-
 ### Inspector de Canales (`inspect_channel.py`)
-Permite ver los mensajes crudos o estructurados de cualquier canal:
+Permite ver los mensajes crudos o estructurados con detección automática de parser:
 ```bash
+# Inspeccionar canal de Nypau con auto-detección
+python inspect_channel.py -c -1001630413456 -n 5 --parse
+
+# Inspeccionar canal de Bunny
 python inspect_channel.py -c -1002230433964 -n 5 --parse
 ```
 
@@ -178,7 +198,7 @@ python inspect_channel.py -c -1002230433964 -n 5 --parse
 
 ## 📱 Formato de los Mensajes ("Ofertas Aguja")
 
-Cada alerta despachada luce de la siguiente forma:
+Cada alerta despachada luce limpia y ordenada:
 
 ```text
 🪡 Ofertas Aguja · #Ripley ✨
@@ -196,6 +216,8 @@ $54.990 - 14/07/2026
 
 [ 🛍️ Obtener Oferta ]
 ```
+
+*(Cuando un canal como Nypau no informa tienda, el encabezado se muestra limpiamente como `🪡 Ofertas Aguja ✨` sin etiquetas vacías).*
 
 ---
 

@@ -1,10 +1,11 @@
 """
-main.py — Punto de entrada del Telegram Deal Forwarder Pro.
+main.py — Punto de entrada del Telegram Deal Forwarder Pro (Multi-canal y Multi-proveedor).
 
 Uso:
-  python main.py              → Escucha en tiempo real (event-driven, 0ms latency)
-  python main.py --backfill 20 → Analiza los últimos 20 mensajes y reenvía los que pasen filtros
-  python main.py --dry-run    → Analiza sin enviar al bot (muestra qué pasaría y qué se descartaría)
+  python main.py              → Escucha en tiempo real todos los canales configurados (event-driven, 0ms)
+  python main.py --backfill 20 → Analiza los últimos 20 mensajes de cada canal
+  python main.py --backfill 20 --channel -1001815551781 → Analiza los últimos 20 de un canal específico
+  python main.py --dry-run    → Modo simulación (no envía mensajes al bot)
 """
 import asyncio
 import json
@@ -21,7 +22,7 @@ if sys.stdout.encoding != "utf-8":
 load_dotenv()
 
 from core.database import SQLiteDealRepository
-from engine.parser import BunnyDealParser
+from engine.parser import get_parser, BunnyDealParser, BaseDealParser
 from engine.filters.base import BaseFilter
 from engine.filters.discount import MinDiscountFilter
 from engine.filters.history import StrictHistoricalLowFilter
@@ -30,7 +31,7 @@ from engine.filters.store import StoreFilter
 from engine.filters.pipeline import FilterPipeline
 from engine.formatters.embed_formatter import EmbedMessageFormatter
 from engine.dispatchers.bot_dispatcher import TelegramBotDispatcher
-from engine.listener import DealForwarderEngine
+from engine.listener import DealForwarderEngine, ChannelSourceConfig
 from core.client import build_client
 
 CONFIG_PATH = Path(__file__).parent / "config.json"
@@ -55,8 +56,8 @@ def get_bot_tokens(config: dict) -> list[str]:
     return [t.strip() for t in cfg_tokens if t and t.strip()]
 
 
-def build_pipeline(config: dict, repo: SQLiteDealRepository) -> FilterPipeline:
-    filters_cfg = config.get("filters", {})
+def build_pipeline_from_dict(filters_cfg: dict, repo: SQLiteDealRepository) -> FilterPipeline:
+    """Construye un FilterPipeline a partir de un diccionario de configuración de filtros."""
     filters_list: list[BaseFilter] = []
 
     # 1. Filtro de Tiendas (Whitelist / Blacklist)
@@ -75,7 +76,7 @@ def build_pipeline(config: dict, repo: SQLiteDealRepository) -> FilterPipeline:
     if filters_cfg.get("strict_historical_low", True):
         allow_no_hist = filters_cfg.get("allow_no_history", False)
         min_disc_no_hist = filters_cfg.get("min_discount_if_no_history", 80)
-        min_drop = filters_cfg.get("min_drop_percentage", 20.0)
+        min_drop = filters_cfg.get("min_drop_percentage", 60.0)
         filters_list.append(
             StrictHistoricalLowFilter(
                 allow_no_history=allow_no_hist,
@@ -92,10 +93,53 @@ def build_pipeline(config: dict, repo: SQLiteDealRepository) -> FilterPipeline:
     return FilterPipeline(filters_list)
 
 
+def build_sources(config: dict, repo: SQLiteDealRepository) -> list[ChannelSourceConfig]:
+    """Crea la lista de configuraciones de fuentes con sus respectivos parsers y pipelines."""
+    sources_cfg = config.get("sources", [])
+    global_filters = config.get("filters", {})
+
+    sources: list[ChannelSourceConfig] = []
+
+    if sources_cfg and isinstance(sources_cfg, list):
+        for item in sources_cfg:
+            cid = str(item.get("channel_id", "")).strip()
+            if not cid:
+                continue
+            name = item.get("name", cid)
+            parser_type = item.get("parser", "bunny")
+            parser = get_parser(parser_type)
+
+            merged_filters = dict(global_filters)
+            if "filters" in item and isinstance(item["filters"], dict):
+                merged_filters.update(item["filters"])
+
+            pipeline = build_pipeline_from_dict(merged_filters, repo)
+            sources.append(ChannelSourceConfig(
+                channel_id=cid,
+                name=name,
+                parser=parser,
+                pipeline=pipeline,
+            ))
+
+    # Retrocompatibilidad para 'source_channel' como string único
+    if not sources and "source_channel" in config:
+        cid = str(config["source_channel"]).strip()
+        pipeline = build_pipeline_from_dict(global_filters, repo)
+        sources.append(ChannelSourceConfig(
+            channel_id=cid,
+            name="Canal Principal",
+            parser=BunnyDealParser(),
+            pipeline=pipeline,
+        ))
+
+    return sources
+
+
 async def main():
     args = sys.argv[1:]
     is_dry_run = "--dry-run" in args
     backfill_limit = None
+    target_channel = None
 
     if "--backfill" in args:
         idx = args.index("--backfill")
@@ -104,8 +148,14 @@ async def main():
         except (IndexError, ValueError):
             backfill_limit = 15
 
+    if "--channel" in args:
+        idx = args.index("--channel")
+        try:
+            target_channel = args[idx + 1]
+        except IndexError:
+            pass
+
     config = load_config()
-    source_channel = config["source_channel"]
     destination_channel = config["destination_channel"]
     bot_tokens = get_bot_tokens(config)
 
@@ -116,20 +166,25 @@ async def main():
         )
         return
 
-    logger.info("=" * 60)
-    logger.info("🚀 INICIANDO TELEGRAM DEAL FORWARDER PRO")
-    logger.info(f"Canal Fuente  : {source_channel}")
-    logger.info(f"Canal Destino : {destination_channel}")
-    logger.info(f"Tokens Bot    : {len(bot_tokens)} configurado(s)")
-    logger.info(f"Modo Dry Run  : {is_dry_run}")
-    logger.info("=" * 60)
-
     repo = SQLiteDealRepository()
-    parser = BunnyDealParser()
-    pipeline = build_pipeline(config, repo)
+    sources = build_sources(config, repo)
+
+    if not sources:
+        logger.error("⚠️ No hay canales fuente configurados en 'sources' ni 'source_channel'.")
+        return
+
+    logger.info("=" * 65)
+    logger.info("🚀 INICIANDO TELEGRAM DEAL FORWARDER PRO (MULTI-CANAL)")
+    logger.info(f"Canales Fuente : {len(sources)} activo(s):")
+    for s in sources:
+        logger.info(f"   • {s.name} ({s.channel_id}) -> Parser: {type(s.parser).__name__}")
+    logger.info(f"Canal Destino  : {destination_channel}")
+    logger.info(f"Tokens Bot     : {len(bot_tokens)} configurado(s)")
+    logger.info(f"Modo Dry Run   : {is_dry_run}")
+    logger.info("=" * 65)
+
     formatter = EmbedMessageFormatter()
 
-    # Si es dry-run, podemos usar un dispatcher simulado que solo loguea
     if is_dry_run:
         class DummyDispatcher:
             async def dispatch(self, deal):
@@ -145,7 +200,6 @@ async def main():
             show_above_text=config.get("options", {}).get("show_above_text", False),
         )
 
-    # Iniciar cliente Telethon para escuchar
     telethon_client = build_client()
 
     async with telethon_client:
@@ -158,17 +212,15 @@ async def main():
 
         engine = DealForwarderEngine(
             telethon_client=telethon_client,
-            source_channel=source_channel,
-            parser=parser,
-            pipeline=pipeline,
             dispatcher=dispatcher,
             repository=repo,
+            sources=sources,
         )
 
         if backfill_limit is not None or is_dry_run:
             limit = backfill_limit or 15
-            logger.info(f"Ejecutando análisis de los últimos {limit} mensajes...")
-            await engine.run_backfill(limit=limit)
+            logger.info(f"Ejecutando backfill de los últimos {limit} mensajes...")
+            await engine.run_backfill(limit=limit, target_channel=target_channel)
             return
 
         # Modo en vivo continuo (eventos en tiempo real)

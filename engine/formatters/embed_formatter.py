@@ -34,10 +34,12 @@ class EmbedMessageFormatter:
 
         # 2. Tienda y Título
         clean_title = html.escape(deal.title)
-        store = deal.store or "Oferta"
 
-        # 3. Cabecera con marca y tienda (sin porcentaje redundante arriba)
-        header = f"{self.brand_name} · <b>#{store}</b> ✨\n"
+        # 3. Cabecera con marca (y tienda opcional si existe)
+        if deal.store:
+            header = f"{self.brand_name} · <b>#{deal.store}</b> ✨\n"
+        else:
+            header = f"{self.brand_name} ✨\n"
 
         # 4. Cálculo de la rebaja real
         min_hist = deal.previous_historical_low
