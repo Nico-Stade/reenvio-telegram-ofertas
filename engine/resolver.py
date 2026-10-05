@@ -97,14 +97,45 @@ class SharkLinkResolver:
 
         logger.info("[Resolver] Inicializando navegador off-screen para resolución de ofertas...")
         options = uc.ChromeOptions()
-        # Ventana fuera de pantalla para no molestar al usuario ni interrumpir la interfaz
-        options.add_argument("--window-position=-2000,-2000")
-        options.add_argument("--window-size=600,500")
         options.add_argument("--no-sandbox")
         options.add_argument("--disable-gpu")
         options.add_argument("--disable-dev-shm-usage")
 
-        driver = uc.Chrome(options=options)
+        # Si corre en Linux sin pantalla (entorno contenedor como bot-hosting), usar headless
+        is_linux_headless = sys.platform.startswith("linux") and not os.environ.get("DISPLAY")
+        if is_linux_headless:
+            options.add_argument("--headless=new")
+        else:
+            # En Windows / entornos con display, usar off-screen para no interrumpir al usuario
+            options.add_argument("--window-position=-2000,-2000")
+            options.add_argument("--window-size=600,500")
+
+        # Detección automática de binarios portátiles en data/ o variables de entorno
+        chrome_bin = os.getenv("CHROME_BIN") or os.getenv("CHROME_PATH")
+        if not chrome_bin:
+            candidates = [
+                Path("data/chrome-linux/chrome"),
+                Path("data/chrome-linux64/chrome"),
+                Path("data/chromium/chrome"),
+                Path("data/chrome/chrome"),
+                Path("data/chromium-browser"),
+            ]
+            for c in candidates:
+                if c.is_file() and os.access(c, os.X_OK):
+                    chrome_bin = str(c.resolve())
+                    break
+                elif c.is_dir():
+                    found = list(c.rglob("chrome"))
+                    if found and os.access(found[0], os.X_OK):
+                        chrome_bin = str(found[0].resolve())
+                        break
+
+        kwargs = {"options": options}
+        if chrome_bin:
+            logger.info(f"[Resolver] Usando binario Chrome detectado en: {chrome_bin}")
+            kwargs["browser_executable_path"] = chrome_bin
+
+        driver = uc.Chrome(**kwargs)
 
         # Cargar cookies de autorización en el dominio link.ofertasshark.cl
         cookies = self._load_cookies()
