@@ -94,7 +94,7 @@ class EmbedMessageFormatter:
         # Botón 2: Búsqueda en Google (incluye tienda y título para ir directo al producto)
         query = f"{deal.store or ''} {deal.title}".strip()
         google_url = f"https://www.google.com/search?q={urllib.parse.quote_plus(query)}"
-        google_btn = {"text": "🔍 Buscar en Google", "url": google_url}
+        google_btn = {"text": "🔍 Buscar", "url": google_url}
 
         return {
             "inline_keyboard": [
