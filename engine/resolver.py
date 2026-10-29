@@ -1,5 +1,5 @@
 """
-engine/resolver.py — Utilidades de normalización de URLs y detección de tiendas.
+engine/resolver.py: Utilidades de normalización de URLs y detección de tiendas.
 Diseñado para entornos headless ligeros sin dependencias de navegador (Chrome/Selenium).
 """
 from typing import Optional

@@ -1,5 +1,5 @@
 """
-core/database.py — Repositorio SQLite para estado, persistencia y deduplicación.
+core/database.py: Repositorio SQLite para estado, persistencia y deduplicación.
 """
 import sqlite3
 from pathlib import Path

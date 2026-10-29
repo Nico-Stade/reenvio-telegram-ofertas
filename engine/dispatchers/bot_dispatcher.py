@@ -1,5 +1,5 @@
 """
-engine/dispatchers/bot_dispatcher.py — Despachador asíncrono con Telegram Bot API estilo Embed.
+engine/dispatchers/bot_dispatcher.py: Despachador asíncrono con Telegram Bot API estilo Embed.
 Envía siempre como sendMessage con preview embebida (estilo Bunny / embed card), NO como foto gigante.
 """
 import asyncio

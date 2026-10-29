@@ -1,5 +1,5 @@
 """
-engine/filters/pipeline.py — Orquestador del pipeline de filtrado (Pattern: Chain of Responsibility).
+engine/filters/pipeline.py: Orquestador del pipeline de filtrado (Pattern: Chain of Responsibility).
 """
 from typing import List
 from loguru import logger

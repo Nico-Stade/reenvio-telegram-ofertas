@@ -1,5 +1,5 @@
 """
-engine/listener.py — Motor de escucha de ofertas en tiempo real y backfill multi-canal vía Telethon MTProto.
+engine/listener.py: Motor de escucha de ofertas en tiempo real y backfill multi-canal vía Telethon MTProto.
 """
 import asyncio
 from dataclasses import dataclass, field

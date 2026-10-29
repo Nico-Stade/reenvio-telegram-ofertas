@@ -1,5 +1,5 @@
 """
-engine/filters/store.py — Filtro por tienda/origen de la oferta.
+engine/filters/store.py: Filtro por tienda/origen de la oferta.
 """
 from typing import List, Optional
 from core.models import DealItem, FilterResult

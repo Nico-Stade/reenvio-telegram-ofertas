@@ -1,8 +1,8 @@
 """
-core/client.py — Cliente Telethon compartido y resolución de entidades.
+core/client.py: Cliente Telethon compartido y resolución de entidades.
 Soporta:
-  1. SESSION_STRING en .env  → sin interacción (ideal para Docker/VPS)
-  2. Archivo .session local  → login interactivo la primera vez
+  1. SESSION_STRING en .env  -> sin interacción (ideal para Docker/VPS)
+  2. Archivo .session local  -> login interactivo la primera vez
 """
 import os
 from telethon import TelegramClient

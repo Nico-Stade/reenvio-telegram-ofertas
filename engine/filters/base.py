@@ -1,5 +1,5 @@
 """
-engine/filters/base.py — Interfaz base para los filtros de ofertas.
+engine/filters/base.py: Interfaz base para los filtros de ofertas.
 """
 from abc import ABC, abstractmethod
 from core.models import DealItem, FilterResult

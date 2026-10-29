@@ -1,5 +1,5 @@
 """
-inspect_channel.py — Muestra los últimos N mensajes de un canal.
+inspect_channel.py: Muestra los últimos N mensajes de un canal.
 Útil para ver el contenido exacto y verificar el parsing de diferentes proveedores (Bunny, Nypau, etc.).
 
 Uso:
@@ -30,22 +30,22 @@ SEPARATOR = "-" * 60
 def _print_parsed(deal) -> None:
     print(SEPARATOR)
     print(f"  ID              : {deal.raw_id}")
-    print(f"  Tienda          : {deal.store or '—'}")
-    print(f"  Producto        : {deal.title or '—'}")
-    print(f"  Precio original : {deal.original_price:,}" if deal.original_price else "  Precio original : —")
-    print(f"  Precio oferta   : {deal.offer_price:,}" if deal.offer_price else "  Precio oferta   : —")
-    print(f"  Descuento       : {deal.discount_percentage}%" if deal.discount_percentage else "  Descuento       : —")
+    print(f"  Tienda          : {deal.store or '-'}")
+    print(f"  Producto        : {deal.title or '-'}")
+    print(f"  Precio original : {deal.original_price:,}" if deal.original_price else "  Precio original : -")
+    print(f"  Precio oferta   : {deal.offer_price:,}" if deal.offer_price else "  Precio oferta   : -")
+    print(f"  Descuento       : {deal.discount_percentage}%" if deal.discount_percentage else "  Descuento       : -")
     if deal.min_historical_price:
         drop = deal.discount_vs_history
         print(f"  Récord histórico: ${deal.min_historical_price:,} (Rebaja real: -{drop}%)")
     if deal.history:
         print(f"  Historial       :")
         for h in deal.history:
-            print(f"    ${h.price:,} — {h.date}")
+            print(f"    ${h.price:,} - {h.date}")
     else:
-        print(f"  Historial       : —")
-    print(f"  URL producto    : {deal.product_url or '—'}")
-    print(f"  URL imagen      : {deal.image_url or '—'}")
+        print(f"  Historial       : -")
+    print(f"  URL producto    : {deal.product_url or '-'}")
+    print(f"  URL imagen      : {deal.image_url or '-'}")
     print()
 
 
@@ -107,7 +107,7 @@ async def inspect(channel: str, limit: int, parse: bool, parser_name: str, as_js
                 else:
                     print(f"[No se pudo parsear como oferta: ID {msg.id}]")
             else:
-                media_type = type(msg.media).__name__ if msg.media else "—"
+                media_type = type(msg.media).__name__ if msg.media else "-"
                 print(SEPARATOR)
                 print(f"  ID     : {msg.id}")
                 print(f"  Fecha  : {fecha}")

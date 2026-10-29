@@ -1,8 +1,8 @@
-# 🪡 Ofertas Aguja — Telegram Deal Forwarder Pro
+# 🪡 Ofertas Aguja: Telegram Deal Forwarder Pro
 
-Sistema profesional de monitoreo, filtrado inteligente y reenvío de ofertas en Telegram en tiempo real (< 50ms de latencia) con soporte **Multi-Canal** y **Multi-Proveedor** (Bunny, Nypau / Shark, etc.).
+Sistema de monitoreo, filtrado inteligente y reenvío de ofertas en Telegram en tiempo real (< 50ms de latencia) con soporte Multi-Canal y Multi-Proveedor (Bunny, Nypau / Shark, etc.).
 
-Diseñado con **arquitectura limpia orientada a objetos (POO)**, ingesta pasiva mediante **Telethon (Userbot MTProto)**, filtrado matemático estricto contra **mínimos históricos (Anti-Ruido)** y despacho mediante la **API oficial de Bots de Telegram** en formato Embed.
+Diseñado con arquitectura limpia orientada a objetos (POO), ingesta pasiva mediante Telethon (Userbot MTProto), filtrado matemático estricto contra mínimos históricos (Anti-Ruido) y despacho mediante la API oficial de Bots de Telegram con doble botón interactivo.
 
 ---
 
@@ -198,23 +198,25 @@ python inspect_channel.py -c -1002230433964 -n 5 --parse
 
 ## 📱 Formato de los Mensajes ("Ofertas Aguja")
 
-Cada alerta despachada luce limpia y ordenada:
+Cada alerta despachada luce limpia, ordenada y con soporte para error de precio y bypass de enlaces:
 
 ```text
-🪡 Ofertas Aguja · #Ripley ✨
+🪡 Ofertas Aguja · #Ripley
+⚠️ Posible error de precio (solo si califica como anomalía)
+
 ADIDAS ZAPATILLAS HOMBRE ADIDAS URBANO AZUL VL COURT 3.0 CUERO
 
 $54.990 ➜ $20.990 (-62%)
 (Precio lista tienda: $69.990)
 
 Historial 📈
-$54.990 - 29/07/2026
-$69.990 - 17/07/2026
-$54.990 - 14/07/2026
+$54.990 (29/07/2026)
+$69.990 (17/07/2026)
 
 [ Foto Embed de la Oferta ]
 
-[ 🛍️ Obtener Oferta ]
+Botones inline:
+[ 🛍️ Ver oferta ]   [ 🔍 Buscar en Google ]
 ```
 
 *(Cuando un canal como Nypau no informa tienda, el encabezado se muestra limpiamente como `🪡 Ofertas Aguja ✨` sin etiquetas vacías).*

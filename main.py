@@ -1,5 +1,5 @@
 """
-main.py — Punto de entrada del Telegram Deal Forwarder (Multi-canal y Multi-proveedor).
+main.py: Punto de entrada del Telegram Deal Forwarder (Multi-canal y Multi-proveedor).
 
 Uso:
   python main.py              -> Escucha en tiempo real todos los canales configurados

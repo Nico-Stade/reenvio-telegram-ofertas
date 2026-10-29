@@ -1,5 +1,5 @@
 """
-engine/filters/dedup.py — Filtro anti-spam y deduplicación por ventana de tiempo.
+engine/filters/dedup.py: Filtro anti-spam y deduplicación por ventana de tiempo.
 """
 from core.models import DealItem, FilterResult
 from core.database import SQLiteDealRepository

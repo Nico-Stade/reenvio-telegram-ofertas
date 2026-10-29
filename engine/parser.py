@@ -1,5 +1,5 @@
 """
-engine/parser.py — Parsers orientados a objetos para proveedores de ofertas (Bunny y Nypau/Shark).
+engine/parser.py: Parsers orientados a objetos para proveedores de ofertas (Bunny y Nypau/Shark).
 """
 import re
 from typing import Optional, List, Dict, Type

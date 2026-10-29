@@ -111,29 +111,15 @@ class DealItem:
         return 0
 
     @property
+    def glitch_score(self) -> int:
+        """Calcula el Glitch Score compuesto (0 a 100 puntos)."""
+        from engine.scoring import calculate_glitch_score
+        return calculate_glitch_score(self)
+
+    @property
     def is_price_glitch(self) -> bool:
-        """
-        Determina si la oferta presenta indicios claros de error de precio:
-        1. Caída vs mínimo histórico previo >= 75%.
-        2. Precio absurdo en producto de alto valor (oferta <= $3.000 y original >= $30.000).
-        3. Descuento anunciado >= 90% habiendo superado el récord histórico anterior.
-        Descarta placeholders de retail con precios inflados artificialmente ($9.999.999).
-        """
-        if self.original_price and self.original_price >= 9000000 and self.offer_price > 5000:
-            return False
-
-        if self.original_price and self.original_price >= 5000 and self.offer_price <= 300:
-            return True
-
-        drop = self.discount_vs_history
-        if drop and drop >= 75.0:
-            return True
-
-        if self.discount_percentage >= 90 and self.previous_historical_low:
-            if self.offer_price < self.previous_historical_low:
-                return True
-
-        return False
+        """Retorna True si la oferta alcanza el rango Crítico (Glitch Score >= 75)."""
+        return self.glitch_score >= 75
 
 
 @dataclass(frozen=True)
