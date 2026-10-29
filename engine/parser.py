@@ -1,70 +1,61 @@
 """
-engine/parser.py — Parsers orientados a objetos para múltiples proveedores de ofertas.
-Soporta:
-  1. BunnyDealParser: Canales de Bunny (60% OFF, 80% OFF, etc.)
-  2. NypauDealParser: Canales de Nypau / Shark (70%-99% Nypau, Alerta de Ofertas)
+engine/parser.py — Parsers orientados a objetos para proveedores de ofertas (Bunny y Nypau/Shark).
 """
 import re
 from typing import Optional, List, Dict, Type
 from core.models import DealItem, HistoricalEntry
+from engine.resolver import detect_store_from_title, detect_store_from_url
 
 
 def _parse_digits(raw: str) -> Optional[int]:
-    """Extrae todos los dígitos y devuelve un entero, e.g. '$159.990' -> 159990."""
+    """Extrae todos los dígitos y devuelve un entero (e.g. '$159.990' -> 159990)."""
     clean = re.sub(r"[^\d]", "", raw)
     return int(clean) if clean else None
 
 
 class BaseDealParser:
-    """Clase base abstracta para parsers de ofertas."""
+    """Clase base para parsers de ofertas."""
     def parse(self, message_id: int, text: str, source_channel: str = "") -> Optional[DealItem]:
         raise NotImplementedError
 
 
 class BunnyDealParser(BaseDealParser):
     """
-    Parser especializado para los canales de Bunny (60% OFF, 80% OFF, etc.).
-    Extrae campos estructurados y devuelve un objeto DealItem.
+    Parser para canales de Bunny (60% OFF, 80% OFF, etc.).
+    Formato: [🤖](img) #Tienda Dscto. XX% ** Titulo | **[🔍] $Orig -> **$Oferta** Historial: ...
     """
 
     def parse(self, message_id: int, text: str, source_channel: str = "") -> Optional[DealItem]:
         if not text or not text.strip():
             return None
 
-        # 1. URL de la Imagen: [🤖](https://...)
         image_url = None
         m_img = re.search(r"\[🤖\]\((https?://[^)]+)\)", text)
         if m_img:
             image_url = m_img.group(1).strip()
 
-        # 2. Tienda: hashtag #Tienda (e.g. #Falabella, #Paris, #Lider, etc.)
         store = None
         m_store = re.search(r"#(\w+)", text)
         if m_store:
             store = m_store.group(1).strip()
 
-        # 3. Descuento anunciado: Dscto. 75% o similar
         discount = None
         m_disc = re.search(r"Dscto\.\s*(\d+)%", text, re.IGNORECASE)
         if m_disc:
             discount = int(m_disc.group(1))
 
-        # 4. Nombre del producto: ** Titulo | **[🔍]
         title = None
         m_title = re.search(r"\*\*\s*(.+?)\s*\|\s*\*\*\[🔍\]", text)
         if m_title:
             title = m_title.group(1).strip()
         else:
-            # Fallback si no tiene el emoji de lupa
             m_title_fb = re.search(r"\*\*\s*([^\*]+?)\s*\*\*", text)
             if m_title_fb:
                 title = m_title_fb.group(1).strip()
 
-        # Si no logramos extraer un título, descartar
         if not title:
             return None
 
-        # 5. Precios: "$X.XXX -> **$Y.YYY (N%)**"
         orig_price = None
         offer_price = None
         m_price = re.search(
@@ -77,18 +68,15 @@ class BunnyDealParser(BaseDealParser):
             if discount is None and m_price.group(3):
                 discount = int(m_price.group(3))
 
-        # Si no hay precio de oferta, no es una oferta válida
         if offer_price is None or offer_price <= 0:
             return None
 
-        # Si aún no tenemos discount, calcularlo matemáticamente
         if discount is None and orig_price and orig_price > offer_price:
             discount = int(round((1 - (offer_price / orig_price)) * 100))
         elif discount is None:
             discount = 0
 
-        # 6. Historial de precios: bloque **Historial 📊 **
-        # Formato Bunny: $PRECIO - DD/MM/YYYY
+        # Formato de historial Bunny: $PRECIO - DD/MM/YYYY
         history: List[HistoricalEntry] = []
         hist_block = re.search(
             r"Historial.*?\n((?:\s*\$[\d\.]+\s+-\s+\d{2}/\d{2}/\d{4}\s*\n?)+)",
@@ -101,7 +89,6 @@ class BunnyDealParser(BaseDealParser):
                 if p:
                     history.append(HistoricalEntry(price=p, date=entry.group(2).strip()))
 
-        # 7. URL del producto: [**VER PRODUCTO**](url) o similar
         product_url = None
         m_url = re.search(r"\[\*\*VER PRODUCTO\*\*\]\((https?://[^)]+)\)", text, re.IGNORECASE)
         if m_url:
@@ -126,41 +113,17 @@ class BunnyDealParser(BaseDealParser):
         )
 
 
-STORE_DOMAINS = {
-    "falabella.com": "Falabella",
-    "ripley.cl": "Ripley",
-    "cencosud.com": "Paris",
-    "paris.cl": "Paris",
-    "walmartimages.cl": "Lider",
-    "lider.cl": "Lider",
-    "mlstatic.com": "Mercado Libre",
-    "mercadolibre.cl": "Mercado Libre",
-    "pcfactory.cl": "PC Factory",
-    "hites.com": "Hites",
-    "jumbo.cl": "Jumbo",
-    "easy.cl": "Easy",
-    "sodimac.cl": "Sodimac",
-    "zara.com": "Zara",
-    "hm.com": "H&M",
-    "stretto.cl": "Stretto",
-}
-
-
 class NypauDealParser(BaseDealParser):
     """
-    Parser especializado para los canales de Nypau / Shark.
-    Soporta:
-      - Canales: -1001630413456 (70%-99% Nypau), -1001815551781 (Alerta de Ofertas)
-      - Redirecciones Cloudflare / ofertasshark.cl
-      - Historial invertido (DD/MM/YYYY $PRECIO)
-      - Detección de tienda por negritas en primera línea o dominios CDN de imagen
+    Parser para canales de Nypau / Shark.
+    Soporta historial con formato invertido (DD/MM/YYYY $PRECIO) y detección
+    de tienda por prefijo de título o dominios de imagen.
     """
 
     def parse(self, message_id: int, text: str, source_channel: str = "") -> Optional[DealItem]:
         if not text or not text.strip():
             return None
 
-        # Descartar mensajes no estructurados (charlas, texto libre o enlaces sueltos)
         if not ("[PRODUCTO]" in text or "link.ofertasshark.cl" in text or "**Precio histórico" in text):
             return None
 
@@ -168,27 +131,24 @@ class NypauDealParser(BaseDealParser):
         if not lines:
             return None
 
-        # 1. URL de la Imagen: primer enlace markdown ignorando placeholders de s3
+        # Extraer imagen (excluyendo enlaces de redirección y placeholders de error)
         image_url = None
         for m in re.finditer(r"\[[^\]]+\]\((https?://[^)]+)\)", text):
             url = m.group(1).strip()
-            if "scraper-image-public" in url or "page-not-found" in url or "ofertasshark.cl" in url:
+            if "scraper-image-public" in url or "page-not-found" in url or "link.ofertasshark.cl" in url:
                 continue
             image_url = url
             break
 
-        # 2. Título desde la primera línea (tienda omitida hasta resolver link real)
         first_line = lines[0]
         bolds = re.findall(r"\*\*(.+?)\*\*", first_line)
 
         title = None
         if len(bolds) >= 2:
-            # Si hay dos negritas (ej: **Pesas Chile** **Par Guantes...**), unimos para no perder el contexto
             title = f"{bolds[0].strip()} - {bolds[1].strip()}"
         elif len(bolds) == 1:
             title = bolds[0].strip()
         else:
-            # Fallback en caso de que el título esté en líneas siguientes
             for l in lines[1:3]:
                 b = re.findall(r"\*\*(.+?)\*\*", l)
                 if b and not any(k in b[0] for k in ["$", "%", "Precio"]):
@@ -198,11 +158,13 @@ class NypauDealParser(BaseDealParser):
         if not title:
             return None
 
-        # Limpiar caracteres decorativos del final del título
         title = title.strip(" .-")
-        store = None  # No definir tienda por ahora hasta que se obtenga el link real directo
 
-        # 4. Precios: "$ORIG -> ... -> **$OFERTA** (XX%)"
+        # Detección de tienda mediante prefijo de marca o dominio de imagen
+        store = detect_store_from_title(title)
+        if not store and image_url:
+            store = detect_store_from_url(image_url)
+
         offer_price = None
         m_offer = re.search(r"\*\*(\$[\d\.]+)\*\*", text)
         if m_offer:
@@ -216,7 +178,6 @@ class NypauDealParser(BaseDealParser):
         if m_orig:
             orig_price = _parse_digits(m_orig.group(1))
 
-        # Porcentaje anunciado
         discount = None
         m_disc = re.search(r"\(([\d\.,]+)%\)", text)
         if m_disc:
@@ -230,7 +191,6 @@ class NypauDealParser(BaseDealParser):
         elif discount is None:
             discount = 0
 
-        # 5. Historial de precios: bloque **Precio histórico 📉**
         # Formato Nypau: DD/MM/YYYY $PRECIO
         history: List[HistoricalEntry] = []
         hist_block = re.search(r"Precio hist[oó]rico.*?\n([\s\S]+)", text, re.IGNORECASE)
@@ -240,7 +200,6 @@ class NypauDealParser(BaseDealParser):
                 if p:
                     history.append(HistoricalEntry(price=p, date=h_entry.group(1).strip()))
 
-        # 6. URL del producto: [PRODUCTO](https://link.ofertasshark.cl/...)
         product_url = None
         m_url = re.search(r"\[PRODUCTO\]\((https?://[^)]+)\)", text, re.IGNORECASE)
         if m_url:
@@ -274,14 +233,12 @@ PARSER_REGISTRY: Dict[str, Type[BaseDealParser]] = {
 
 
 def get_parser(name_or_alias: str) -> BaseDealParser:
-    """Retorna una instancia del parser configurado por nombre."""
     key = (name_or_alias or "").strip().lower()
     parser_cls = PARSER_REGISTRY.get(key, BunnyDealParser)
     return parser_cls()
 
 
 def detect_parser(text: str) -> BaseDealParser:
-    """Detecta heurísticamente el parser adecuado según el contenido del mensaje."""
     if not text:
         return BunnyDealParser()
     if "ofertasshark.cl" in text or "Precio histórico" in text or "[PRODUCTO]" in text:

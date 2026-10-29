@@ -1,5 +1,5 @@
 """
-engine/filters/discount.py — Filtro por porcentaje de descuento y límites de precio.
+engine/filters/discount.py: Filtro por porcentaje de descuento y límites de precio.
 """
 from typing import Optional
 from core.models import DealItem, FilterResult
@@ -15,6 +15,14 @@ class MinDiscountFilter(BaseFilter):
         self.max_price = max_price
 
     async def evaluate(self, deal: DealItem) -> FilterResult:
+        # Los errores de precio evidentes se aprueban automáticamente
+        if deal.is_price_glitch:
+            return FilterResult(
+                passed=True,
+                filter_name=self.name,
+                reason="Aprobado: Error de precio evidente detectado."
+            )
+
         if deal.discount_percentage < self.min_discount:
             return FilterResult(
                 passed=False,

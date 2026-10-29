@@ -6,6 +6,11 @@
       "parser": "bunny"
     },
     {
+      "channel_id": "-1002023523123",
+      "name": "Bunny 80% OFF",
+      "parser": "bunny"
+    },
+    {
       "channel_id": "-1001630413456",
       "name": "🐘 70% - 99% Nypau 🐘",
       "parser": "nypau"
@@ -18,9 +23,9 @@
   ],
   "destination_channel": "-1003952548471",
   "filters": {
-    "min_discount": 60,
+    "min_discount": 55,
     "strict_historical_low": true,
-    "min_drop_percentage": 60.0,
+    "min_drop_percentage": 60,
     "allow_no_history": false,
     "dedup_window_hours": 12,
     "allowed_stores": [],

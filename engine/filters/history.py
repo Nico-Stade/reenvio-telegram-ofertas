@@ -1,5 +1,5 @@
 """
-engine/filters/history.py — Filtro estricto de mínimo histórico anti-ruido.
+engine/filters/history.py: Filtro estricto de mínimo histórico anti-ruido.
 Calcula y filtra basándose en el PRECIO MÁS BAJO DEL HISTORIAL.
 """
 from typing import Optional
@@ -14,6 +14,7 @@ class StrictHistoricalLowFilter(BaseFilter):
     - Exige que el precio actual sea menor o igual al récord histórico más bajo.
     - Opcionalmente exige una caída mínima porcentual (min_drop_percentage, default 0%).
     - Descarta todo lo que sea más caro que su mínimo anterior (puro ruido).
+    - Los errores evidentes de precio (is_price_glitch) se aprueban con máxima prioridad.
     """
 
     def __init__(
@@ -27,6 +28,14 @@ class StrictHistoricalLowFilter(BaseFilter):
         self.min_drop_percentage = min_drop_percentage
 
     async def evaluate(self, deal: DealItem) -> FilterResult:
+        # Prioridad absoluta: Detectar errores de precio sin trabas
+        if deal.is_price_glitch:
+            return FilterResult(
+                passed=True,
+                filter_name=self.name,
+                reason="Aprobado: Error de precio evidente detectado."
+            )
+
         min_hist = deal.previous_historical_low
 
         # Caso 1: El producto tiene historial informado

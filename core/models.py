@@ -1,5 +1,5 @@
 """
-core/models.py — Modelos de dominio fuertemente tipados.
+core/models.py: Modelos de dominio fuertemente tipados.
 """
 from dataclasses import dataclass, field
 from datetime import datetime
@@ -32,16 +32,26 @@ class DealItem:
     raw_text: str = ""
 
     @property
-    def min_historical_price(self) -> Optional[int]:
-        """Devuelve el precio más bajo registrado en el historial."""
+    def previous_historical_low(self) -> Optional[int]:
+        """
+        Devuelve el precio más bajo registrado en el historial PREVIO a esta oferta.
+        Si la primera entrada del historial ya refleja el precio de oferta actual
+        (típico de proveedores como Bunny que indexan la oferta actual al tope del historial con fecha de hoy),
+        se toma el mínimo de las entradas previas para calcular la verdadera caída.
+        """
         if not self.history:
             return None
-        return min(h.price for h in self.history if h.price is not None and h.price > 0)
+        valid_prices = [h.price for h in self.history if h.price is not None and h.price > 0]
+        if not valid_prices:
+            return None
+        if len(valid_prices) > 1 and valid_prices[0] == self.offer_price:
+            return min(valid_prices[1:])
+        return min(valid_prices)
 
     @property
-    def previous_historical_low(self) -> Optional[int]:
-        """Alias semántico para el precio mínimo del historial."""
-        return self.min_historical_price
+    def min_historical_price(self) -> Optional[int]:
+        """Devuelve el precio más bajo registrado en el historial."""
+        return self.previous_historical_low
 
     @property
     def discount_vs_history(self) -> Optional[float]:
@@ -99,6 +109,31 @@ class DealItem:
         if self.original_price and self.original_price > self.offer_price:
             return self.original_price - self.offer_price
         return 0
+
+    @property
+    def is_price_glitch(self) -> bool:
+        """
+        Determina si la oferta presenta indicios claros de error de precio:
+        1. Caída vs mínimo histórico previo >= 75%.
+        2. Precio absurdo en producto de alto valor (oferta <= $3.000 y original >= $30.000).
+        3. Descuento anunciado >= 90% habiendo superado el récord histórico anterior.
+        Descarta placeholders de retail con precios inflados artificialmente ($9.999.999).
+        """
+        if self.original_price and self.original_price >= 9000000 and self.offer_price > 5000:
+            return False
+
+        if self.original_price and self.original_price >= 5000 and self.offer_price <= 300:
+            return True
+
+        drop = self.discount_vs_history
+        if drop and drop >= 75.0:
+            return True
+
+        if self.discount_percentage >= 90 and self.previous_historical_low:
+            if self.offer_price < self.previous_historical_low:
+                return True
+
+        return False
 
 
 @dataclass(frozen=True)
